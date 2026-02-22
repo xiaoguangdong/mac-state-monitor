@@ -1,0 +1,22 @@
+[package]
+name = "mac-state-monitor"
+version = "0.1.0"
+edition = "2021"
+description = "macOS menu bar system monitor"
+
+[dependencies]
+sysinfo = "0.33"
+tao = "0.30"
+plotters = "0.3"
+plotters-bitmap = "0.3"
+softbuffer = "0.4"
+raw-window-handle = "0.6"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSAttributedString", "NSRange", "NSDictionary", "NSValue"] }
+objc2-app-kit = { version = "0.3", features = ["NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSMenu", "NSMenuItem", "NSFont", "NSParagraphStyle", "NSText", "NSButton", "NSControl", "NSCell", "NSEvent", "NSRunningApplication", "NSApplication", "NSResponder", "NSView", "NSColor"] }
+block2 = "0.6"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
