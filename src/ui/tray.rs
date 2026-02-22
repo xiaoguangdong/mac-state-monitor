@@ -66,6 +66,10 @@ fn ensure_menu_handler() -> *const AnyObject {
 pub struct TrayManager {
     items: Option<ModuleItems>,
     mtm: MainThreadMarker,
+    temp_menu: Option<Retained<NSMenu>>,
+    temp_reading_items: Vec<Retained<NSMenuItem>>,
+    cpu_menu: Option<Retained<NSMenu>>,
+    cpu_reading_items: Vec<Retained<NSMenuItem>>,
 }
 
 struct ModuleItems {
@@ -80,7 +84,14 @@ impl TrayManager {
     pub fn new() -> Self {
         let mtm = MainThreadMarker::new().expect("must be called on main thread");
         ensure_menu_handler();
-        Self { items: None, mtm }
+        Self {
+            items: None,
+            mtm,
+            temp_menu: None,
+            temp_reading_items: Vec::new(),
+            cpu_menu: None,
+            cpu_reading_items: Vec::new(),
+        }
     }
 
     fn ensure_items(&mut self) {
@@ -88,21 +99,175 @@ impl TrayManager {
             return;
         }
         let status_bar = NSStatusBar::systemStatusBar();
-        let temp = status_bar.statusItemWithLength(42.0);
-        let net = status_bar.statusItemWithLength(58.0);
-        let disk = status_bar.statusItemWithLength(32.0);
-        let mem = status_bar.statusItemWithLength(32.0);
-        let cpu = status_bar.statusItemWithLength(32.0);
+        let temp = status_bar.statusItemWithLength(38.0);
+        let net = status_bar.statusItemWithLength(52.0);
+        let disk = status_bar.statusItemWithLength(28.0);
+        let mem = status_bar.statusItemWithLength(28.0);
+        let cpu = status_bar.statusItemWithLength(28.0);
         self.items = Some(ModuleItems { cpu, mem, disk, net, temp });
+    }
+
+    fn ensure_temp_menu(&mut self, stats: &SystemStats) {
+        if self.temp_menu.is_some() {
+            // Update existing reading items
+            self.update_temp_readings(stats);
+            return;
+        }
+        let mtm = self.mtm;
+        unsafe {
+            let menu = NSMenu::new(mtm);
+            let mut tag: isize = 200;
+
+            MENU_ACTIONS.with(|actions| {
+                let mut actions = actions.borrow_mut();
+                actions.retain(|k, _| *k < 200 || *k >= 300);
+
+                let charts_item = make_action_item("Show Charts", tag, mtm);
+                actions.insert(tag, SHOW_CHARTS_ID.to_string());
+                tag += 1;
+                menu.addItem(&charts_item);
+
+                menu.addItem(&NSMenuItem::separatorItem(mtm));
+
+                let temp_choice_item = NSMenuItem::new(mtm);
+                temp_choice_item.setTitle(&NSString::from_str("Display"));
+                let temp_sub = NSMenu::new(mtm);
+                for comp in &["CPU", "GPU", "SSD"] {
+                    let item = make_action_item(comp, tag, mtm);
+                    actions.insert(tag, format!("{}{}", TEMP_PREFIX, comp));
+                    tag += 1;
+                    temp_sub.addItem(&item);
+                }
+                temp_choice_item.setSubmenu(Some(&temp_sub));
+                menu.addItem(&temp_choice_item);
+
+                menu.addItem(&NSMenuItem::separatorItem(mtm));
+            });
+
+            // Create reading items for each sensor
+            self.temp_reading_items.clear();
+            for reading in &stats.temperature.readings {
+                let item = NSMenuItem::new(mtm);
+                item.setTitle(&NSString::from_str(&format!(
+                    "{}: {:.0}C",
+                    reading.label, reading.temp_c
+                )));
+                item.setEnabled(false);
+                menu.addItem(&item);
+                self.temp_reading_items.push(item);
+            }
+            if stats.temperature.readings.is_empty() {
+                let item = NSMenuItem::new(mtm);
+                item.setTitle(&NSString::from_str("No sensors found"));
+                item.setEnabled(false);
+                menu.addItem(&item);
+                self.temp_reading_items.push(item);
+            }
+
+            let items = self.items.as_ref().unwrap();
+            items.temp.setMenu(Some(&menu));
+            self.temp_menu = Some(menu);
+        }
+    }
+
+    fn update_temp_readings(&mut self, stats: &SystemStats) {
+        // Update existing items in-place, add/remove if count changed
+        let readings = &stats.temperature.readings;
+        for (i, item) in self.temp_reading_items.iter().enumerate() {
+            if let Some(reading) = readings.get(i) {
+                item.setTitle(&NSString::from_str(&format!(
+                    "{}: {:.0}C",
+                    reading.label, reading.temp_c
+                )));
+            }
+        }
+
+        // If reading count changed, rebuild the menu next time
+        if readings.len() != self.temp_reading_items.len() {
+            self.temp_menu = None;
+            self.temp_reading_items.clear();
+        }
+    }
+
+    fn ensure_cpu_menu(&mut self, stats: &SystemStats) {
+        if self.cpu_menu.is_some() {
+            self.update_cpu_menu(stats);
+            return;
+        }
+        let mtm = self.mtm;
+        let menu = build_native_menu(stats, mtm, &mut self.cpu_reading_items);
+        let items = self.items.as_ref().unwrap();
+        items.cpu.setMenu(Some(&menu));
+        self.cpu_menu = Some(menu);
+    }
+
+    fn update_cpu_menu(&self, stats: &SystemStats) {
+        // Update info items in-place
+        let mut idx = 0;
+
+        // CPU
+        if let Some(item) = self.cpu_reading_items.get(idx) {
+            item.setTitle(&NSString::from_str(&format!(
+                "CPU: {:.1}% ({} cores)",
+                stats.cpu.global_usage, stats.cpu.core_count
+            )));
+        }
+        idx += 1;
+
+        // Memory
+        if let Some(item) = self.cpu_reading_items.get(idx) {
+            let mem = &stats.memory;
+            item.setTitle(&NSString::from_str(&format!(
+                "Memory: {} / {} ({:.0}%)",
+                format_bytes(mem.used_bytes),
+                format_bytes(mem.total_bytes),
+                mem.usage_percent
+            )));
+        }
+        idx += 1;
+
+        // Disk (just first one)
+        if let Some(disk) = stats.disks.first() {
+            if let Some(item) = self.cpu_reading_items.get(idx) {
+                let name = if disk.name.is_empty() { &disk.mount_point } else { &disk.name };
+                item.setTitle(&NSString::from_str(&format!(
+                    "Disk {}: {} / {} ({:.0}%)",
+                    name,
+                    format_bytes(disk.total_bytes - disk.available_bytes),
+                    format_bytes(disk.total_bytes),
+                    disk.usage_percent
+                )));
+            }
+            idx += 1;
+        }
+
+        // Network
+        if let Some(item) = self.cpu_reading_items.get(idx) {
+            item.setTitle(&NSString::from_str(&format!(
+                "Net: D {} /s  U {} /s",
+                format_speed(stats.network.received_per_sec),
+                format_speed(stats.network.transmitted_per_sec)
+            )));
+        }
+        idx += 1;
+
+        // Temperature readings
+        for reading in &stats.temperature.readings {
+            if let Some(item) = self.cpu_reading_items.get(idx) {
+                item.setTitle(&NSString::from_str(&format!(
+                    "{}: {:.0}C",
+                    reading.label, reading.temp_c
+                )));
+            }
+            idx += 1;
+        }
     }
 
     pub fn update(&mut self, stats: &SystemStats, config: &Config) {
         self.ensure_items();
-        let items = match &self.items {
-            Some(i) => i,
-            None => return,
-        };
+        if self.items.is_none() { return; }
         let mtm = self.mtm;
+        let items = self.items.as_ref().unwrap();
 
         // CPU
         let cpu_pct = format!("{:.0}%", stats.cpu.global_usage);
@@ -121,7 +286,7 @@ impl TrayManager {
             .unwrap_or_else(|| "--%".to_string());
         set_module_title(&items.disk, &disk_pct, "SSD", Some(disk_usage), mtm);
 
-        // Network — two-line with U/D labels
+        // Network
         let net_up = format!("U {}", format_speed(stats.network.transmitted_per_sec));
         let net_dn = format!("D {}", format_speed(stats.network.received_per_sec));
         set_module_title(&items.net, &net_up, &net_dn, None, mtm);
@@ -138,13 +303,9 @@ impl TrayManager {
             .unwrap_or(0.0);
         set_module_title(&items.temp, &temp_val, "TEMP", Some(temp_c), mtm);
 
-        // CPU menu (tags 100-199)
-        let menu = build_native_menu(stats, mtm);
-        items.cpu.setMenu(Some(&menu));
-
-        // Temp menu (tags 200-299, fixed range, reset each time)
-        let temp_menu = build_temp_menu(stats, mtm);
-        items.temp.setMenu(Some(&temp_menu));
+        // Menus — update in-place
+        self.ensure_temp_menu(stats);
+        self.ensure_cpu_menu(stats);
     }
 }
 
@@ -204,7 +365,7 @@ fn set_module_title(
                 let line1_range = NSRange::new(0, line1_len);
                 attr_str.addAttribute_value_range(color_key, &value_color, line1_range);
 
-                let label_color = NSColor::secondaryLabelColor();
+                let label_color = NSColor::labelColor();
                 let line2_range = NSRange::new(line1_len + 1, full_len - line1_len - 1);
                 attr_str.addAttribute_value_range(color_key, &label_color, line2_range);
             } else {
@@ -231,113 +392,87 @@ fn get_color_for_value(value: f32) -> Retained<NSColor> {
 
 // ── Menu builders ──
 
-/// Temperature menu (tags 200-299)
-fn build_temp_menu(stats: &SystemStats, mtm: MainThreadMarker) -> Retained<NSMenu> {
-    unsafe {
-        let menu = NSMenu::new(mtm);
-        let mut tag: isize = 200;
-
-        MENU_ACTIONS.with(|actions| {
-            let mut actions = actions.borrow_mut();
-            // Clear all temp tags (200-299)
-            actions.retain(|k, _| *k < 200 || *k >= 300);
-
-            // Show Charts
-            let charts_item = make_action_item("Show Charts", tag, mtm);
-            actions.insert(tag, SHOW_CHARTS_ID.to_string());
-            tag += 1;
-            menu.addItem(&charts_item);
-
-            menu.addItem(&NSMenuItem::separatorItem(mtm));
-
-            // Temperature component selector
-            let temp_choice_item = NSMenuItem::new(mtm);
-            temp_choice_item.setTitle(&NSString::from_str("Display"));
-            let temp_sub = NSMenu::new(mtm);
-            for comp in &["CPU", "GPU", "SSD"] {
-                let item = make_action_item(comp, tag, mtm);
-                actions.insert(tag, format!("{}{}", TEMP_PREFIX, comp));
-                tag += 1;
-                temp_sub.addItem(&item);
-            }
-            temp_choice_item.setSubmenu(Some(&temp_sub));
-            menu.addItem(&temp_choice_item);
-
-            menu.addItem(&NSMenuItem::separatorItem(mtm));
-
-            // Current readings (info only)
-            for reading in &stats.temperature.readings {
-                let label = format!("{}: {:.0}°C", reading.label, reading.temp_c);
-                add_info_item(&menu, &label, mtm);
-            }
-            if stats.temperature.readings.is_empty() {
-                add_info_item(&menu, "No sensors found", mtm);
-            }
-        });
-
-        menu
-    }
-}
-
 /// CPU/system menu (tags 100-199)
-fn build_native_menu(stats: &SystemStats, mtm: MainThreadMarker) -> Retained<NSMenu> {
+fn build_native_menu(
+    stats: &SystemStats,
+    mtm: MainThreadMarker,
+    info_items: &mut Vec<Retained<NSMenuItem>>,
+) -> Retained<NSMenu> {
     unsafe {
         let menu = NSMenu::new(mtm);
         let mut tag: isize = 100;
+        info_items.clear();
 
         MENU_ACTIONS.with(|actions| {
             let mut actions = actions.borrow_mut();
-            // Clear CPU menu tags (100-199)
             actions.retain(|k, _| *k < 100 || *k >= 200);
 
             // CPU
-            let cpu_label = format!(
+            let cpu_item = NSMenuItem::new(mtm);
+            cpu_item.setTitle(&NSString::from_str(&format!(
                 "CPU: {:.1}% ({} cores)",
                 stats.cpu.global_usage, stats.cpu.core_count
-            );
-            add_info_item(&menu, &cpu_label, mtm);
+            )));
+            cpu_item.setEnabled(false);
+            menu.addItem(&cpu_item);
+            info_items.push(cpu_item);
 
             // Memory
             let mem = &stats.memory;
-            let mem_label = format!(
+            let mem_item = NSMenuItem::new(mtm);
+            mem_item.setTitle(&NSString::from_str(&format!(
                 "Memory: {} / {} ({:.0}%)",
                 format_bytes(mem.used_bytes),
                 format_bytes(mem.total_bytes),
                 mem.usage_percent
-            );
-            add_info_item(&menu, &mem_label, mtm);
+            )));
+            mem_item.setEnabled(false);
+            menu.addItem(&mem_item);
+            info_items.push(mem_item);
 
-            // Disk
-            for disk in &stats.disks {
+            // Disk (first only)
+            if let Some(disk) = stats.disks.first() {
                 let name = if disk.name.is_empty() {
                     &disk.mount_point
                 } else {
                     &disk.name
                 };
-                let disk_label = format!(
+                let disk_item = NSMenuItem::new(mtm);
+                disk_item.setTitle(&NSString::from_str(&format!(
                     "Disk {}: {} / {} ({:.0}%)",
                     name,
                     format_bytes(disk.total_bytes - disk.available_bytes),
                     format_bytes(disk.total_bytes),
                     disk.usage_percent
-                );
-                add_info_item(&menu, &disk_label, mtm);
+                )));
+                disk_item.setEnabled(false);
+                menu.addItem(&disk_item);
+                info_items.push(disk_item);
             }
 
             // Network
-            let net_label = format!(
+            let net_item = NSMenuItem::new(mtm);
+            net_item.setTitle(&NSString::from_str(&format!(
                 "Net: D {} /s  U {} /s",
                 format_speed(stats.network.received_per_sec),
                 format_speed(stats.network.transmitted_per_sec)
-            );
-            add_info_item(&menu, &net_label, mtm);
+            )));
+            net_item.setEnabled(false);
+            menu.addItem(&net_item);
+            info_items.push(net_item);
 
             menu.addItem(&NSMenuItem::separatorItem(mtm));
 
             // Temperature
             for reading in &stats.temperature.readings {
-                let label = format!("{}: {:.0}°C", reading.label, reading.temp_c);
-                add_info_item(&menu, &label, mtm);
+                let temp_item = NSMenuItem::new(mtm);
+                temp_item.setTitle(&NSString::from_str(&format!(
+                    "{}: {:.0}C",
+                    reading.label, reading.temp_c
+                )));
+                temp_item.setEnabled(false);
+                menu.addItem(&temp_item);
+                info_items.push(temp_item);
             }
 
             menu.addItem(&NSMenuItem::separatorItem(mtm));
@@ -368,13 +503,6 @@ fn build_native_menu(stats: &SystemStats, mtm: MainThreadMarker) -> Retained<NSM
 }
 
 // ── Menu helpers ──
-
-unsafe fn add_info_item(menu: &NSMenu, label: &str, mtm: MainThreadMarker) {
-    let item = NSMenuItem::new(mtm);
-    item.setTitle(&NSString::from_str(label));
-    item.setEnabled(false);
-    menu.addItem(&item);
-}
 
 unsafe fn make_action_item(
     title: &str,
