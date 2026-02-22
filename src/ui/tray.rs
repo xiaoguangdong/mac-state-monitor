@@ -106,11 +106,11 @@ impl TrayManager {
 
         // CPU
         let cpu_pct = format!("{:.0}%", stats.cpu.global_usage);
-        set_colored_title(&items.cpu, &cpu_pct, stats.cpu.global_usage, mtm);
+        set_module_title(&items.cpu, &cpu_pct, "CPU", Some(stats.cpu.global_usage), mtm);
 
         // Memory
         let mem_pct = format!("{:.0}%", stats.memory.usage_percent);
-        set_colored_title(&items.mem, &mem_pct, stats.memory.usage_percent, mtm);
+        set_module_title(&items.mem, &mem_pct, "MEM", Some(stats.memory.usage_percent), mtm);
 
         // Disk
         let disk_usage = stats.disks.first().map(|d| d.usage_percent).unwrap_or(0.0);
@@ -119,12 +119,12 @@ impl TrayManager {
             .first()
             .map(|d| format!("{:.0}%", d.usage_percent))
             .unwrap_or_else(|| "--%".to_string());
-        set_colored_title(&items.disk, &disk_pct, disk_usage, mtm);
+        set_module_title(&items.disk, &disk_pct, "SSD", Some(disk_usage), mtm);
 
-        // Network — two-line with U/D labels, using NSAttributedString for position control
+        // Network — two-line with U/D labels
         let net_up = format!("U {}", format_speed(stats.network.transmitted_per_sec));
         let net_dn = format!("D {}", format_speed(stats.network.received_per_sec));
-        set_two_line_title(&items.net, &net_up, &net_dn, mtm);
+        set_module_title(&items.net, &net_up, &net_dn, None, mtm);
 
         // Temperature
         let temp_val = stats
@@ -136,7 +136,7 @@ impl TrayManager {
             .temperature
             .find_temp(&config.menubar_temp_component)
             .unwrap_or(0.0);
-        set_colored_title(&items.temp, &temp_val, temp_c, mtm);
+        set_module_title(&items.temp, &temp_val, "TEMP", Some(temp_c), mtm);
 
         // CPU menu (tags 100-199)
         let menu = build_native_menu(stats, mtm);
@@ -148,64 +148,15 @@ impl TrayManager {
     }
 }
 
-// ── Color helpers ──
+// ── Title renderer ──
 
-fn get_color_for_value(value: f32) -> Retained<NSColor> {
-    if value >= 80.0 {
-        NSColor::systemRedColor()
-    } else if value >= 60.0 {
-        NSColor::systemPurpleColor()
-    } else if value >= 30.0 {
-        NSColor::systemYellowColor()
-    } else {
-        NSColor::systemGreenColor()
-    }
-}
-
-// ── Title renderers ──
-
-/// Single-line colored title (CPU, MEM, DISK, TEMP)
-fn set_colored_title(item: &NSStatusItem, text: &str, value: f32, mtm: MainThreadMarker) {
-    if let Some(button) = item.button(mtm) {
-        unsafe {
-            let color = get_color_for_value(value);
-            let ns_text = NSString::from_str(text);
-            let attr_str = NSMutableAttributedString::initWithString(
-                NSMutableAttributedString::alloc(),
-                &ns_text,
-            );
-            let full_range = NSRange::new(0, ns_text.len());
-
-            let font: Retained<NSFont> = msg_send![
-                NSFont::class(),
-                monospacedDigitSystemFontOfSize: 11.0_f64,
-                weight: 0.5_f64
-            ];
-            let font_key = ns_string!("NSFont");
-            attr_str.addAttribute_value_range(font_key, &font, full_range);
-
-            let color_key = ns_string!("NSColor");
-            attr_str.addAttribute_value_range(color_key, &color, full_range);
-
-            // Baseline offset for vertical centering in menu bar
-            let baseline_key = ns_string!("NSBaselineOffset");
-            let offset_val: Retained<objc2_foundation::NSNumber> = msg_send![
-                objc2_foundation::NSNumber::class(),
-                numberWithDouble: -1.0_f64
-            ];
-            attr_str.addAttribute_value_range(baseline_key, &offset_val, full_range);
-
-            let _: () = msg_send![&button, setAttributedTitle: &*attr_str];
-        }
-    }
-}
-
-/// Two-line title using NSAttributedString (for network U/D)
-/// Only uses ASCII characters — no Unicode arrows to avoid ObjC crashes
-fn set_two_line_title(
+/// Two-line module title: line1 (value) + line2 (label)
+/// If color_value is Some, line1 gets colored; otherwise uses label color.
+fn set_module_title(
     item: &NSStatusItem,
     line1: &str,
     line2: &str,
+    color_value: Option<f32>,
     mtm: MainThreadMarker,
 ) {
     if let Some(button) = item.button(mtm) {
@@ -219,7 +170,7 @@ fn set_two_line_title(
             let full_len = ns_text.len();
             let full_range = NSRange::new(0, full_len);
 
-            // Monospace digit font for alignment
+            // Font
             let font: Retained<NSFont> = msg_send![
                 NSFont::class(),
                 monospacedDigitSystemFontOfSize: 9.0_f64,
@@ -227,11 +178,6 @@ fn set_two_line_title(
             ];
             let font_key = ns_string!("NSFont");
             attr_str.addAttribute_value_range(font_key, &font, full_range);
-
-            // Label color
-            let color = NSColor::labelColor();
-            let color_key = ns_string!("NSColor");
-            attr_str.addAttribute_value_range(color_key, &color, full_range);
 
             // Paragraph style: tight line spacing, centered
             let para_style = NSMutableParagraphStyle::new();
@@ -242,7 +188,7 @@ fn set_two_line_title(
             let para_key = ns_string!("NSParagraphStyle");
             attr_str.addAttribute_value_range(para_key, &para_style, full_range);
 
-            // Baseline offset to push text down for vertical centering
+            // Baseline offset for vertical centering
             let baseline_key = ns_string!("NSBaselineOffset");
             let offset_val: Retained<objc2_foundation::NSNumber> = msg_send![
                 objc2_foundation::NSNumber::class(),
@@ -250,8 +196,36 @@ fn set_two_line_title(
             ];
             attr_str.addAttribute_value_range(baseline_key, &offset_val, full_range);
 
+            // Colors: line1 colored (if value provided), line2 always label color
+            let color_key = ns_string!("NSColor");
+            let line1_len = line1.len();
+            if let Some(val) = color_value {
+                let value_color = get_color_for_value(val);
+                let line1_range = NSRange::new(0, line1_len);
+                attr_str.addAttribute_value_range(color_key, &value_color, line1_range);
+
+                let label_color = NSColor::secondaryLabelColor();
+                let line2_range = NSRange::new(line1_len + 1, full_len - line1_len - 1);
+                attr_str.addAttribute_value_range(color_key, &label_color, line2_range);
+            } else {
+                let label_color = NSColor::labelColor();
+                attr_str.addAttribute_value_range(color_key, &label_color, full_range);
+            }
+
             let _: () = msg_send![&button, setAttributedTitle: &*attr_str];
         }
+    }
+}
+
+fn get_color_for_value(value: f32) -> Retained<NSColor> {
+    if value >= 80.0 {
+        NSColor::systemRedColor()
+    } else if value >= 60.0 {
+        NSColor::systemPurpleColor()
+    } else if value >= 30.0 {
+        NSColor::systemYellowColor()
+    } else {
+        NSColor::systemGreenColor()
     }
 }
 
