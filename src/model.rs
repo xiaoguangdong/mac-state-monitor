@@ -34,6 +34,10 @@ impl TemperatureStats {
 
 pub struct HistoryBuffer {
     pub temps: BTreeMap<String, VecDeque<f32>>,
+    pub cpu_usage: VecDeque<f32>,
+    pub mem_usage: VecDeque<f32>,
+    pub net_down: VecDeque<f64>,
+    pub net_up: VecDeque<f64>,
     pub max_points: usize,
 }
 
@@ -41,12 +45,31 @@ impl HistoryBuffer {
     pub fn new(max_points: usize) -> Self {
         Self {
             temps: BTreeMap::new(),
+            cpu_usage: VecDeque::with_capacity(max_points),
+            mem_usage: VecDeque::with_capacity(max_points),
+            net_down: VecDeque::with_capacity(max_points),
+            net_up: VecDeque::with_capacity(max_points),
             max_points,
         }
     }
 
-    pub fn push(&mut self, temp: &TemperatureStats) {
-        for reading in &temp.readings {
+    fn push_val_f32(buf: &mut VecDeque<f32>, val: f32, max: usize) {
+        if buf.len() >= max {
+            buf.pop_front();
+        }
+        buf.push_back(val);
+    }
+
+    fn push_val_f64(buf: &mut VecDeque<f64>, val: f64, max: usize) {
+        if buf.len() >= max {
+            buf.pop_front();
+        }
+        buf.push_back(val);
+    }
+
+    pub fn push(&mut self, stats: &super::model::SystemStats) {
+        // Temperatures
+        for reading in &stats.temperature.readings {
             let buf = self
                 .temps
                 .entry(reading.label.clone())
@@ -56,6 +79,18 @@ impl HistoryBuffer {
             }
             buf.push_back(reading.temp_c);
         }
+
+        // CPU
+        Self::push_val_f32(&mut self.cpu_usage, stats.cpu.global_usage, self.max_points);
+
+        // Memory
+        Self::push_val_f32(&mut self.mem_usage, stats.memory.usage_percent, self.max_points);
+
+        // Network (convert to KB/s for readability)
+        let down_kb = stats.network.received_per_sec as f64 / 1024.0;
+        let up_kb = stats.network.transmitted_per_sec as f64 / 1024.0;
+        Self::push_val_f64(&mut self.net_down, down_kb, self.max_points);
+        Self::push_val_f64(&mut self.net_up, up_kb, self.max_points);
     }
 }
 
