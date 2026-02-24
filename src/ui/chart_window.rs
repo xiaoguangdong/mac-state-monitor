@@ -63,6 +63,7 @@ impl ChartWindow {
             }
             if let Some(w) = &self.window {
                 w.set_visible(true);
+                w.set_focus();
                 w.request_redraw();
             }
             self.visible = true;
