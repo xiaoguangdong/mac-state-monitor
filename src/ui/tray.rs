@@ -262,9 +262,15 @@ impl TrayManager {
 
     pub fn select_runner_category(&mut self, config: &mut Config, category: &str) {
         let categories: &[(&str, &[&str])] = &[
-            ("Cats", &["runcat:cat", "runcat:cat-b", "runcat:cat-c", "runcat:cat-tail"]),
-            ("Animals", &["runcat:human", "runcat:rabbit", "runcat:horse"]),
-            ("Vehicles", &["runcat:engine", "runcat:steam-locomotive"]),
+            ("Cats", &["runcat:cat", "runcat:cat-b", "runcat:cat-c", "runcat:cat-tail", "runcat:flash-cat", "runcat:golden-cat", "runcat:metal-cluster-cat", "runcat:mock-nyan-cat", "runcat:maneki-neko"]),
+            ("Dogs", &["runcat:dog", "runcat:puppy", "runcat:terrier", "runcat:welsh-corgi", "runcat:greyhound"]),
+            ("Animals", &["runcat:bird", "runcat:butterfly", "runcat:chameleon", "runcat:cheetah", "runcat:chicken", "runcat:dinosaur", "runcat:dolphin", "runcat:dragon", "runcat:fishman", "runcat:fox", "runcat:frog", "runcat:hamster-wheel", "runcat:hedgehog", "runcat:horse", "runcat:mouse", "runcat:octopus", "runcat:otter", "runcat:owl", "runcat:parrot", "runcat:penguin", "runcat:penguin2", "runcat:pig", "runcat:rabbit", "runcat:reindeer-sleigh", "runcat:sheep", "runcat:squirrel", "runcat:uhooi", "runcat:whale"]),
+            ("Food", &["runcat:coffee", "runcat:frypan", "runcat:mochi", "runcat:rotating-sushi", "runcat:rubber-duck", "runcat:sausage", "runcat:sushi", "runcat:tapioca-drink"]),
+            ("People", &["runcat:dogeza", "runcat:human", "runcat:party-people", "runcat:push-up", "runcat:sit-up"]),
+            ("Machines", &["runcat:cogwheel", "runcat:engine", "runcat:factory", "runcat:reactor", "runcat:rocket", "runcat:steam-locomotive"]),
+            ("Nature", &["runcat:bonfire", "runcat:drop", "runcat:earth", "runcat:slime", "runcat:snowman", "runcat:sparkler", "runcat:wind-chime"]),
+            ("Fantasy", &["runcat:ghost", "runcat:jack-o-lantern", "runcat:triforce"]),
+            ("Abstract", &["runcat:city", "runcat:cradle", "runcat:dots", "runcat:entaku", "runcat:pendulum", "runcat:pulse", "runcat:sine-curve"]),
         ];
 
         let cat_ids: Vec<String> = if let Some((_, ids)) = categories.iter().find(|(name, _)| *name == category) {
@@ -822,7 +828,7 @@ impl RunnerAnimator {
             selected_id: "runcat:cat".to_string(),
             rotation_ids: vec!["runcat:cat".to_string()],
             rotation_index: 0,
-            display_secs: 10,
+            display_secs: 600,
             frame_ms: 100,
             frame_index: 0,
             frame_accumulator: 0.0,
@@ -1637,9 +1643,15 @@ fn build_native_menu(
 
             // Categorize runners
             let categories: &[(&str, &[&str])] = &[
-                ("Cats", &["runcat:cat", "runcat:cat-b", "runcat:cat-c", "runcat:cat-tail"]),
-                ("Animals", &["runcat:human", "runcat:rabbit", "runcat:horse"]),
-                ("Vehicles", &["runcat:engine", "runcat:steam-locomotive"]),
+                ("Cats", &["runcat:cat", "runcat:cat-b", "runcat:cat-c", "runcat:cat-tail", "runcat:flash-cat", "runcat:golden-cat", "runcat:metal-cluster-cat", "runcat:mock-nyan-cat", "runcat:maneki-neko"]),
+                ("Dogs", &["runcat:dog", "runcat:puppy", "runcat:terrier", "runcat:welsh-corgi", "runcat:greyhound"]),
+                ("Animals", &["runcat:bird", "runcat:butterfly", "runcat:chameleon", "runcat:cheetah", "runcat:chicken", "runcat:dinosaur", "runcat:dolphin", "runcat:dragon", "runcat:fishman", "runcat:fox", "runcat:frog", "runcat:hamster-wheel", "runcat:hedgehog", "runcat:horse", "runcat:mouse", "runcat:octopus", "runcat:otter", "runcat:owl", "runcat:parrot", "runcat:penguin", "runcat:penguin2", "runcat:pig", "runcat:rabbit", "runcat:reindeer-sleigh", "runcat:sheep", "runcat:squirrel", "runcat:uhooi", "runcat:whale"]),
+                ("Food", &["runcat:coffee", "runcat:frypan", "runcat:mochi", "runcat:rotating-sushi", "runcat:rubber-duck", "runcat:sausage", "runcat:sushi", "runcat:tapioca-drink"]),
+                ("People", &["runcat:dogeza", "runcat:human", "runcat:party-people", "runcat:push-up", "runcat:sit-up"]),
+                ("Machines", &["runcat:cogwheel", "runcat:engine", "runcat:factory", "runcat:reactor", "runcat:rocket", "runcat:steam-locomotive"]),
+                ("Nature", &["runcat:bonfire", "runcat:drop", "runcat:earth", "runcat:slime", "runcat:snowman", "runcat:sparkler", "runcat:wind-chime"]),
+                ("Fantasy", &["runcat:ghost", "runcat:jack-o-lantern", "runcat:triforce"]),
+                ("Abstract", &["runcat:city", "runcat:cradle", "runcat:dots", "runcat:entaku", "runcat:pendulum", "runcat:pulse", "runcat:sine-curve"]),
             ];
 
             for (cat_name, cat_ids) in categories {
