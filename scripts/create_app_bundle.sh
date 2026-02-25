@@ -32,6 +32,28 @@ if [ -f "assets/AppIcon.icns" ]; then
     cp "assets/AppIcon.icns" "$RESOURCES_PATH/AppIcon.icns"
 fi
 
+# Prefer exporting PNG frames from RunCat; fallback to copying the .car bundle.
+RUNCAT_UI_BUNDLE="/Applications/RunCat.app/Contents/Resources/LocalPackage_UserInterface.bundle"
+RUNCAT_EXPORTED_FRAMES="$RESOURCES_PATH/runcat-frames"
+RUNCAT_EXPORTED_WHITE_FRAMES="$RESOURCES_PATH/runcat-frames-white"
+if [ -d "$RUNCAT_UI_BUNDLE" ]; then
+    if swift "$SCRIPT_DIR/export_runcat_frames.swift" "$RUNCAT_UI_BUNDLE" "$RUNCAT_EXPORTED_FRAMES"; then
+        echo "RunCat frames exported to: $RUNCAT_EXPORTED_FRAMES"
+        if swift "$SCRIPT_DIR/export_runcat_frames.swift" "$RUNCAT_UI_BUNDLE" "$RUNCAT_EXPORTED_WHITE_FRAMES" --white; then
+            echo "RunCat white frames exported to: $RUNCAT_EXPORTED_WHITE_FRAMES"
+        else
+            echo "RunCat white frame export failed; copying normal frames as fallback"
+            rm -rf "$RUNCAT_EXPORTED_WHITE_FRAMES"
+            cp -R "$RUNCAT_EXPORTED_FRAMES" "$RUNCAT_EXPORTED_WHITE_FRAMES"
+        fi
+    else
+        echo "RunCat frame export failed; falling back to .car bundle copy"
+        rm -rf "$RUNCAT_EXPORTED_FRAMES"
+        rm -rf "$RUNCAT_EXPORTED_WHITE_FRAMES"
+        cp -R "$RUNCAT_UI_BUNDLE" "$RESOURCES_PATH/LocalPackage_UserInterface.bundle"
+    fi
+fi
+
 # Ad-hoc code sign
 codesign --force --deep --sign - "$BUNDLE_PATH"
 

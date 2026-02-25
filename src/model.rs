@@ -84,7 +84,11 @@ impl HistoryBuffer {
         Self::push_val_f32(&mut self.cpu_usage, stats.cpu.global_usage, self.max_points);
 
         // Memory
-        Self::push_val_f32(&mut self.mem_usage, stats.memory.usage_percent, self.max_points);
+        Self::push_val_f32(
+            &mut self.mem_usage,
+            stats.memory.usage_percent,
+            self.max_points,
+        );
 
         // Network (convert to KB/s for readability)
         let down_kb = stats.network.received_per_sec as f64 / 1024.0;

@@ -75,8 +75,5 @@ fn notify(title: &str, message: &str) {
         "display notification \"{}\" with title \"{}\"",
         message, title
     );
-    let _ = Command::new("osascript")
-        .arg("-e")
-        .arg(&script)
-        .spawn();
+    let _ = Command::new("osascript").arg("-e").arg(&script).spawn();
 }

@@ -66,7 +66,10 @@ pub fn collect_from(components: &Components) -> TemperatureStats {
     }
 
     for (label, temp) in other {
-        readings.push(TemperatureReading { label, temp_c: temp });
+        readings.push(TemperatureReading {
+            label,
+            temp_c: temp,
+        });
     }
 
     // Only fallback to powermetrics if no readings and we're confident it will work

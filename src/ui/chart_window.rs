@@ -208,11 +208,7 @@ fn draw_percent_chart(
         .label_style(("sans-serif", 24).into_font().color(&TEXT_COLOR.mix(0.7)))
         .draw();
 
-    let series: Vec<(usize, f32)> = data
-        .iter()
-        .enumerate()
-        .map(|(i, &v)| (i, v))
-        .collect();
+    let series: Vec<(usize, f32)> = data.iter().enumerate().map(|(i, &v)| (i, v)).collect();
 
     if !series.is_empty() {
         let _ = chart.draw_series(AreaSeries::new(
@@ -233,11 +229,7 @@ fn draw_net_chart(
     data: &VecDeque<f64>,
     color: &RGBColor,
 ) {
-    let max_val = data
-        .iter()
-        .cloned()
-        .fold(10.0_f64, |a, b| a.max(b))
-        * 1.2;
+    let max_val = data.iter().cloned().fold(10.0_f64, |a, b| a.max(b)) * 1.2;
 
     let current = data
         .back()
@@ -274,11 +266,7 @@ fn draw_net_chart(
         .label_style(("sans-serif", 24).into_font().color(&TEXT_COLOR.mix(0.7)))
         .draw();
 
-    let series: Vec<(usize, f64)> = data
-        .iter()
-        .enumerate()
-        .map(|(i, &v)| (i, v))
-        .collect();
+    let series: Vec<(usize, f64)> = data.iter().enumerate().map(|(i, &v)| (i, v)).collect();
 
     if !series.is_empty() {
         let _ = chart.draw_series(AreaSeries::new(
@@ -314,10 +302,7 @@ fn draw_temp_combined(
     }
 
     let mut chart = ChartBuilder::on(area)
-        .caption(
-            "TEMP",
-            ("sans-serif", 36).into_font().color(&TEXT_COLOR),
-        )
+        .caption("TEMP", ("sans-serif", 36).into_font().color(&TEXT_COLOR))
         .margin(6)
         .x_label_area_size(0)
         .y_label_area_size(34)
@@ -334,13 +319,12 @@ fn draw_temp_combined(
         .draw();
 
     for (name, data, color) in &all_data {
-        let series: Vec<(usize, f32)> = data
-            .iter()
-            .enumerate()
-            .map(|(i, &v)| (i, v))
-            .collect();
+        let series: Vec<(usize, f32)> = data.iter().enumerate().map(|(i, &v)| (i, v)).collect();
         if !series.is_empty() {
-            let val = data.back().map(|v| format!("{:.0}", v)).unwrap_or("--".into());
+            let val = data
+                .back()
+                .map(|v| format!("{:.0}", v))
+                .unwrap_or("--".into());
             let label = format!("{} {}", name, val);
             let _ = chart.draw_series(AreaSeries::new(
                 series.iter().cloned(),
