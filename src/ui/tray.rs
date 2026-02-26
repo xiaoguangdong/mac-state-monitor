@@ -935,9 +935,6 @@ impl RunnerAnimator {
             self.active_frames = frames;
             self.active_frames_precolored_white = precolored_white;
             if self.active_frames.is_empty() {
-                self.selected_id = "fallback:runner".to_string();
-                self.rotation_ids = vec![self.selected_id.clone()];
-                self.rotation_index = 0;
                 self.active_frames = fallback_frames();
                 self.active_frames_precolored_white = false;
             }
@@ -950,9 +947,6 @@ impl RunnerAnimator {
 
         if self.active_frames.is_empty() {
             self.active_frames = fallback_frames();
-            self.selected_id = "fallback:runner".to_string();
-            self.rotation_ids = vec![self.selected_id.clone()];
-            self.rotation_index = 0;
             self.active_frames_precolored_white = false;
             return true;
         }
@@ -968,10 +962,6 @@ impl RunnerAnimator {
                 title: format!("Custom: {}", custom.name),
             });
         }
-        options.push(RunnerMenuOption {
-            id: "fallback:runner".to_string(),
-            title: "Built-in Runner".to_string(),
-        });
         options
     }
 
@@ -1692,31 +1682,6 @@ fn build_native_menu(
 
                 cat_menu_item.setSubmenu(Some(&cat_sub));
                 runner_sub.addItem(&cat_menu_item);
-            }
-
-            // "Other" category for fallback + custom
-            let known_ids: Vec<&str> = categories.iter().flat_map(|(_, ids)| ids.iter().copied()).collect();
-            let other_opts: Vec<&RunnerMenuOption> = runner_options.iter()
-                .filter(|opt| !known_ids.contains(&opt.id.as_str()))
-                .collect();
-            if !other_opts.is_empty() {
-                let other_menu_item = NSMenuItem::new(mtm);
-                other_menu_item.setTitle(&NSString::from_str("Other"));
-                let other_sub = NSMenu::new(mtm);
-                for opt in &other_opts {
-                    let item = make_action_item(&opt.title, tag, mtm);
-                    if effective_rotation_ids.contains(&opt.id) {
-                        item.setState(NSControlStateValueOn);
-                    }
-                    if let Some(preview) = runner_preview_images.get(&opt.id) {
-                        item.setImage(Some(preview));
-                    }
-                    actions.insert(tag, format!("{}{}", RUNNER_TOGGLE_PREFIX, opt.id));
-                    tag += 1;
-                    other_sub.addItem(&item);
-                }
-                other_menu_item.setSubmenu(Some(&other_sub));
-                runner_sub.addItem(&other_menu_item);
             }
 
             runner_sub.addItem(&NSMenuItem::separatorItem(mtm));
