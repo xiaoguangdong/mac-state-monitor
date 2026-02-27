@@ -247,11 +247,21 @@ impl TrayManager {
 
     pub fn select_all_runners(&mut self, config: &mut Config) {
         let all_ids: Vec<String> = self.runner.menu_options().iter().map(|o| o.id.clone()).collect();
-        // Always select all — no toggle behavior
-        config.runner_rotation_ids = all_ids;
-        // Keep current runner_id unchanged so no jarring switch
-        if !config.runner_rotation_ids.contains(&config.runner_id) {
-            config.runner_id = config.runner_rotation_ids.first().cloned().unwrap_or_else(|| "runcat:cat".to_string());
+        let currently_all = all_ids.iter().all(|id| config.runner_rotation_ids.contains(id));
+        if currently_all {
+            // Deselect all → keep only the currently playing runner
+            let keep = self.runner.selected_id.clone();
+            let keep = if all_ids.contains(&keep) { keep } else {
+                all_ids.first().cloned().unwrap_or_else(|| "runcat:cat".to_string())
+            };
+            config.runner_rotation_ids = vec![keep.clone()];
+            config.runner_id = keep;
+        } else {
+            // Select all, keep current runner_id unchanged
+            config.runner_rotation_ids = all_ids;
+            if !config.runner_rotation_ids.contains(&config.runner_id) {
+                config.runner_id = config.runner_rotation_ids.first().cloned().unwrap_or_else(|| "runcat:cat".to_string());
+            }
         }
         self.runner.sync_config(config);
         self.invalidate_cpu_menu();
