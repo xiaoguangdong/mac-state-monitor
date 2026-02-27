@@ -247,15 +247,12 @@ impl TrayManager {
 
     pub fn select_all_runners(&mut self, config: &mut Config) {
         let all_ids: Vec<String> = self.runner.menu_options().iter().map(|o| o.id.clone()).collect();
-        let currently_all = all_ids.iter().all(|id| config.runner_rotation_ids.contains(id));
-        if currently_all {
-            // Deselect all → keep only the first one
-            config.runner_rotation_ids = vec![all_ids.into_iter().next().unwrap_or_else(|| "runcat:cat".to_string())];
-        } else {
-            // Select all in order
-            config.runner_rotation_ids = all_ids;
+        // Always select all — no toggle behavior
+        config.runner_rotation_ids = all_ids;
+        // Keep current runner_id unchanged so no jarring switch
+        if !config.runner_rotation_ids.contains(&config.runner_id) {
+            config.runner_id = config.runner_rotation_ids.first().cloned().unwrap_or_else(|| "runcat:cat".to_string());
         }
-        config.runner_id = config.runner_rotation_ids.first().cloned().unwrap_or_else(|| "runcat:cat".to_string());
         self.runner.sync_config(config);
         self.invalidate_cpu_menu();
     }
@@ -1295,7 +1292,7 @@ fn discover_runcat_prefixes_from_exported_frames() -> Vec<String> {
         }
 
         let prefix = entry.file_name().to_string_lossy().to_string();
-        if prefix.is_empty() {
+        if prefix.is_empty() || prefix == "all-runners" || prefix == "self-made" {
             continue;
         }
 
