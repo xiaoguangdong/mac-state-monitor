@@ -322,17 +322,14 @@ impl TrayManager {
         };
         if let Some(button) = items.runner.button(self.mtm) {
             let white_mode = self.runner.icon_mode == RunnerIconMode::White;
+            let use_template_tint = white_mode && !self.runner.active_frames_precolored_white;
+
             if let Some(img) = frame {
-                let use_template_tint = white_mode && !self.runner.active_frames_precolored_white;
                 img.setTemplate(use_template_tint);
             }
             button.setImage(frame);
-            button.setImagePosition(NSCellImagePosition::ImageOnly);
-            button.setImageScaling(NSImageScaling::ScaleProportionallyDown);
-            button.setImageHugsTitle(false);
-            button.setTitle(&NSString::from_str(""));
+
             unsafe {
-                let use_template_tint = white_mode && !self.runner.active_frames_precolored_white;
                 if use_template_tint {
                     let white = NSColor::whiteColor();
                     let _: () = msg_send![&button, setContentTintColor: Some(&*white)];
@@ -355,6 +352,15 @@ impl TrayManager {
         let mem = status_bar.statusItemWithLength(module_width);
         let cpu = status_bar.statusItemWithLength(module_width);
         let runner = status_bar.statusItemWithLength(NSSquareStatusItemLength);
+
+        // 初始化 runner button 的静态属性（只设置一次）
+        if let Some(button) = runner.button(self.mtm) {
+            button.setImagePosition(NSCellImagePosition::ImageOnly);
+            button.setImageScaling(NSImageScaling::ScaleProportionallyDown);
+            button.setImageHugsTitle(false);
+            button.setTitle(&NSString::from_str(""));
+        }
+
         self.items = Some(ModuleItems {
             runner,
             cpu,
@@ -1014,11 +1020,25 @@ impl RunnerAnimator {
         let effective_frame_ms = (self.frame_ms as f64 / speed_factor).max(16.0);
 
         self.frame_accumulator += elapsed_ms;
+
+        // 只在帧真正改变时才返回新图像
+        let old_index = self.frame_index;
         while self.frame_accumulator >= effective_frame_ms {
             self.frame_accumulator -= effective_frame_ms;
             self.frame_index = (self.frame_index + 1) % self.active_frames.len();
         }
-        self.current_frame()
+
+        // 防止累加器无限增长
+        if self.frame_accumulator > effective_frame_ms * 2.0 {
+            self.frame_accumulator = 0.0;
+        }
+
+        // 只在帧索引改变时才返回图像
+        if old_index != self.frame_index {
+            self.current_frame()
+        } else {
+            None
+        }
     }
 
     fn rotate_runner_if_needed(&mut self, now: Instant) {

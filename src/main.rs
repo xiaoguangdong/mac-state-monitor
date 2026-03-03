@@ -29,20 +29,28 @@ fn main() {
     let mut last_animation = Instant::now();
 
     event_loop.run(move |event, event_loop, control_flow| {
-        let now = Instant::now();
-        if now.duration_since(last_tick) >= poll_interval {
-            app.tick();
-            poll_interval = Duration::from_secs(app.config().poll_interval_secs);
-            last_tick = now;
-        }
-        if now.duration_since(last_animation) >= animation_interval {
-            app.animate(now);
-            last_animation = now;
-        }
+        // 只在 NewEvents 时处理定时任务
+        if matches!(event, Event::NewEvents(_)) {
+            let now = Instant::now();
 
-        let next_poll = last_tick + poll_interval;
-        let next_animation = last_animation + animation_interval;
-        *control_flow = ControlFlow::WaitUntil(next_poll.min(next_animation));
+            // 检查是否需要 tick
+            if now.duration_since(last_tick) >= poll_interval {
+                app.tick();
+                poll_interval = Duration::from_secs(app.config().poll_interval_secs);
+                last_tick = now;
+            }
+
+            // 检查是否需要动画更新
+            if now.duration_since(last_animation) >= animation_interval {
+                app.animate(now);
+                last_animation = now;
+            }
+
+            // 计算下次唤醒时间
+            let next_poll = last_tick + poll_interval;
+            let next_animation = last_animation + animation_interval;
+            *control_flow = ControlFlow::WaitUntil(next_poll.min(next_animation));
+        }
 
         match event {
             Event::WindowEvent {
