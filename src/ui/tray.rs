@@ -468,8 +468,11 @@ impl TrayManager {
         );
         let items = self.items.as_ref().unwrap();
         items.cpu.setMenu(Some(&menu));
-        items.runner.setMenu(Some(&menu));
         self.cpu_menu = Some(menu);
+
+        // Build separate runner menu
+        let runner_menu = build_runner_menu(config, mtm, &runner_options, &runner_preview_images);
+        items.runner.setMenu(Some(&runner_menu));
     }
 
     fn update_cpu_menu(&self, stats: &SystemStats, config: &Config) {
@@ -1637,10 +1640,46 @@ fn build_native_menu(
 
             menu.addItem(&NSMenuItem::separatorItem(mtm));
 
-            // Runner categorized menu
-            let runner_item = NSMenuItem::new(mtm);
-            runner_item.setTitle(&NSString::from_str("Runner"));
-            let runner_sub = NSMenu::new(mtm);
+            // Launch at Login
+            let login_item = make_action_item("Launch at Login", tag, mtm);
+            let state = if config.launch_at_login {
+                NSControlStateValueOn
+            } else {
+                NSControlStateValueOff
+            };
+            login_item.setState(state);
+            actions.insert(tag, LAUNCH_AT_LOGIN_ID.to_string());
+            tag += 1;
+            menu.addItem(&login_item);
+            *login_item_out = Some(login_item);
+
+            menu.addItem(&NSMenuItem::separatorItem(mtm));
+
+            // Quit
+            let quit_item = make_action_item("Quit", tag, mtm);
+            actions.insert(tag, QUIT_ID.to_string());
+            menu.addItem(&quit_item);
+        });
+
+        menu
+    }
+}
+
+fn build_runner_menu(
+    config: &Config,
+    mtm: MainThreadMarker,
+    runner_options: &[RunnerMenuOption],
+    runner_preview_images: &HashMap<String, Retained<NSImage>>,
+) -> Retained<NSMenu> {
+    unsafe {
+        let menu = NSMenu::new(mtm);
+        menu.setAutoenablesItems(false);
+        let mut tag: isize = 200;
+
+        MENU_ACTIONS.with(|actions| {
+            let mut actions = actions.borrow_mut();
+            actions.retain(|k, _| *k < 200 || *k >= 400);
+
             let effective_rotation_ids = if config.runner_rotation_ids.is_empty() {
                 vec![config.runner_id.clone()]
             } else {
@@ -1655,8 +1694,8 @@ fn build_native_menu(
             }
             actions.insert(tag, RUNNER_ALL_ID.to_string());
             tag += 1;
-            runner_sub.addItem(&all_item);
-            runner_sub.addItem(&NSMenuItem::separatorItem(mtm));
+            menu.addItem(&all_item);
+            menu.addItem(&NSMenuItem::separatorItem(mtm));
 
             // Categorize runners
             let categories: &[(&str, &[&str])] = &[
@@ -1708,16 +1747,16 @@ fn build_native_menu(
                 }
 
                 cat_menu_item.setSubmenu(Some(&cat_sub));
-                runner_sub.addItem(&cat_menu_item);
+                menu.addItem(&cat_menu_item);
             }
 
-            runner_sub.addItem(&NSMenuItem::separatorItem(mtm));
+            menu.addItem(&NSMenuItem::separatorItem(mtm));
 
             // Import custom runner
             let import_item = make_action_item("Import Custom Runner Frames…", tag, mtm);
             actions.insert(tag, RUNNER_IMPORT_ID.to_string());
             tag += 1;
-            runner_sub.addItem(&import_item);
+            menu.addItem(&import_item);
 
             // Display time
             let display_sub_item = NSMenuItem::new(mtm);
@@ -1742,32 +1781,7 @@ fn build_native_menu(
                 display_sub.addItem(&item);
             }
             display_sub_item.setSubmenu(Some(&display_sub));
-            runner_sub.addItem(&display_sub_item);
-
-            runner_item.setSubmenu(Some(&runner_sub));
-            menu.addItem(&runner_item);
-
-            menu.addItem(&NSMenuItem::separatorItem(mtm));
-
-            // Launch at Login
-            let login_item = make_action_item("Launch at Login", tag, mtm);
-            let state = if config.launch_at_login {
-                NSControlStateValueOn
-            } else {
-                NSControlStateValueOff
-            };
-            login_item.setState(state);
-            actions.insert(tag, LAUNCH_AT_LOGIN_ID.to_string());
-            tag += 1;
-            menu.addItem(&login_item);
-            *login_item_out = Some(login_item);
-
-            menu.addItem(&NSMenuItem::separatorItem(mtm));
-
-            // Quit
-            let quit_item = make_action_item("Quit", tag, mtm);
-            actions.insert(tag, QUIT_ID.to_string());
-            menu.addItem(&quit_item);
+            menu.addItem(&display_sub_item);
         });
 
         menu
