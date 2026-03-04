@@ -9,7 +9,7 @@ cd "$PROJECT_DIR"
 BINARY_NAME="mac-state-monitor"
 BUNDLE_NAME="Mac State Monitor.app"
 BUNDLE_PATH="target/release/$BUNDLE_NAME"
-VERSION="0.1.0"
+VERSION="0.2.0"
 IDENTIFIER="com.mac-state-monitor.app"
 PKG_OUTPUT="target/release/${BINARY_NAME}-${VERSION}.pkg"
 
